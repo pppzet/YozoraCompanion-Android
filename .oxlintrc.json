@@ -23,7 +23,6 @@
     "ios",
     ".expo",
     "assets",
-    "index.html",
     "expo-env.d.ts"
   ]
 }
