@@ -65,36 +65,6 @@ npm run format:check
 npm run assets:generate
 ```
 
-## APKのリリース(GitHub Actions)
-
-1. GitHubの **Actions** タブ → **Android APK Release** を選ぶ
-2. **Run workflow** を押す(バージョン名は空ならpackage.jsonの値を使用)
-3. ビルドが終わると、`v<バージョン>` のGitHub ReleaseにAPKが添付されます
-
-CI(`CI` ワークフロー)はpush/PRごとにlint・format・typecheck・Metroバンドルを検証します。
-
-### リリース署名(推奨・任意)
-
-Secrets未設定でもAPKはビルドされますが、React Native標準のdebugキーで署名されます。継続して配布するなら、自分のキーストアをSecretsに登録してください(署名が変わるとアップデート時に再インストールが必要になるため、キーストアは大切に保管を)。
-
-```bash
-# キーストアを作る
-keytool -genkeypair -v -keystore release.keystore -alias yozora \
-  -keyalg RSA -keysize 2048 -validity 10000
-
-# base64にしてクリップボードへ(例)
-base64 -w0 release.keystore
-```
-
-リポジトリの **Settings → Secrets and variables → Actions** に登録:
-
-| Secret | 内容 |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | keystoreファイルのbase64 |
-| `ANDROID_KEYSTORE_PASSWORD` | ストアのパスワード |
-| `ANDROID_KEY_ALIAS` | キーのエイリアス(例: `yozora`) |
-| `ANDROID_KEY_PASSWORD` | キーのパスワード |
-
 ## 技術スタック
 
 - **Expo SDK 54**(React Native 0.81 / React 19、New Architecture)+ **expo-router**
