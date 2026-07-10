@@ -128,9 +128,18 @@ export async function pickBackupFile(): Promise<
   } catch {
     return { status: "invalid" };
   }
+  if (!payload || typeof payload !== "object") return { status: "invalid" };
+  // 認識できるstoreが1つ以上あり、存在するstoreはすべて配列であること
+  // （壊れた形のJSONで消去だけ実行されて復元が途中で落ちる事故を防ぐ）
   const hasAny = STORE_KEYS.some((key) => Array.isArray(payload[key]));
-  if (!hasAny) return { status: "invalid" };
+  const allValidShape = STORE_KEYS.every((key) => payload[key] === undefined || Array.isArray(payload[key]));
+  if (!hasAny || !allValidShape) return { status: "invalid" };
   return { status: "picked", payload };
+}
+
+/** 配列でなければ空配列として扱う（復元中に途中で例外を出さないための保険） */
+function asArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 /** 今のデータを置き換えて復元する */
@@ -139,7 +148,7 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
   await clearImageDir();
   const db = getDb();
 
-  for (const c of payload.characters ?? []) {
+  for (const c of asArray(payload.characters)) {
     if (!c.id || !c.name) continue;
     db.runSync(
       "INSERT OR REPLACE INTO characters(id, name, isPlaceholder, persona, createdAt) VALUES(?, ?, ?, ?, ?)",
@@ -163,7 +172,7 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
     }
   }
 
-  for (const l of payload.lines ?? []) {
+  for (const l of asArray(payload.lines)) {
     if (!l.characterId || !l.text) continue;
     if (typeof l.id === "number") {
       db.runSync(
@@ -185,12 +194,12 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
     }
   }
 
-  for (const entry of payload.calendar ?? []) {
+  for (const entry of asArray(payload.calendar)) {
     if (!entry.date) continue;
     db.runSync("INSERT OR REPLACE INTO calendar(date, text) VALUES(?, ?)", entry.date, entry.text ?? "");
   }
 
-  for (const e of payload.diary ?? []) {
+  for (const e of asArray(payload.diary)) {
     if (!e.date) continue;
     let imageUri: string | null = null;
     if (typeof e.image === "string" && e.image.startsWith("data:")) {
@@ -218,7 +227,7 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
     }
   }
 
-  for (const m of payload.chatHistory ?? []) {
+  for (const m of asArray(payload.chatHistory)) {
     if (!m.characterId || !m.text) continue;
     const role = m.role === "user" ? "user" : "model";
     if (typeof m.id === "number") {
@@ -241,7 +250,7 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
     }
   }
 
-  for (const m of payload.meta ?? []) {
+  for (const m of asArray(payload.meta)) {
     if (!m.key || m.key === "geminiApiKey" || m.key === "weatherCache" || m.key === "timerRunState") continue;
     if (m.key === "customBackground") {
       if (typeof m.value === "string" && m.value.startsWith("data:")) {

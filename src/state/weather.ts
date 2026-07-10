@@ -29,7 +29,8 @@ export const useWeather = create<WeatherState>()((set, get) => ({
 
   initialize: () => {
     const location = repo.metaGet<WeatherLocation>("weatherLocation");
-    set({ location });
+    // バックアップ復元後の再初期化でも前の予報が残らないように、毎回まっさらにする
+    set({ location, data: null, lastCode: null, status: location ? "loading" : "idle" });
     if (location) {
       void get().refresh(false);
     }

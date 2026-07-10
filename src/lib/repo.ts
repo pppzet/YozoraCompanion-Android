@@ -206,14 +206,19 @@ export function getChatHistory(characterId: string): ChatMessage[] {
   return getDb().getAllSync<ChatMessage>("SELECT * FROM chat WHERE characterId = ? ORDER BY id", characterId);
 }
 
-export function insertChatMessage(m: Omit<ChatMessage, "id">): void {
-  getDb().runSync(
+export function insertChatMessage(m: Omit<ChatMessage, "id">): number {
+  const result = getDb().runSync(
     "INSERT INTO chat(characterId, role, text, timestamp) VALUES(?, ?, ?, ?)",
     m.characterId,
     m.role,
     m.text,
     m.timestamp,
   );
+  return Number(result.lastInsertRowId);
+}
+
+export function chatMessageExists(id: number): boolean {
+  return getDb().getFirstSync<{ id: number }>("SELECT id FROM chat WHERE id = ?", id) !== null;
 }
 
 export function clearChatHistory(characterId: string): void {

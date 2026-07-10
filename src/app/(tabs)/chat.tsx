@@ -51,7 +51,12 @@ export default function ChatScreen() {
     setInput("");
     setStatus("考え中…");
     try {
-      repo.insertChatMessage({ characterId: character.id, role: "user", text, timestamp: Date.now() });
+      const userMessageId = repo.insertChatMessage({
+        characterId: character.id,
+        role: "user",
+        text,
+        timestamp: Date.now(),
+      });
       reload();
 
       // 口調の参考例（タップ・昼の挨拶の先頭セリフ）をシステムプロンプトへ
@@ -65,6 +70,12 @@ export default function ChatScreen() {
       const turns: AiChatTurn[] = history.map((m) => ({ role: m.role, text: m.text }));
 
       const result = await callAi(systemText, turns);
+      // 返事を待つ間に会話が消されていたら、返信を書き戻さない
+      if (!repo.chatMessageExists(userMessageId)) {
+        setStatus("");
+        reload();
+        return;
+      }
       if (result.ok) {
         repo.insertChatMessage({ characterId: character.id, role: "model", text: result.text, timestamp: Date.now() });
         reload();

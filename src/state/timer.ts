@@ -190,8 +190,9 @@ export const useTimer = create<TimerState>()((set, get) => ({
     const settings = { ...s.settings, [kind]: val };
     repo.metaSet("pomodoroSettings", settings);
     const patch: Partial<TimerState> = { settings };
-    // 停止中に現フェーズと同じ種類を変えたら残り時間も追従（Web版と同じ）
-    if (s.mode === "pomodoro" && !s.running && s.phase === kind) {
+    // 停止中に現フェーズと同じ種類を変えたら残り時間も追従する
+    // （ストップウォッチのタブを見ている間に変えても、ポモドーロ側へ反映されるように）
+    if (!s.running && s.phase === kind) {
       patch.remainingSec = val * 60;
     }
     set(patch);
