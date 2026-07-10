@@ -14,12 +14,9 @@ export function TimerCard() {
   const timer = useTimer();
   const [, setPulse] = useState(0);
 
-  // 1秒ごとに表示を更新し、フェーズ切り替え（tick）も進める
+  // 表示の更新用パルス（フェーズ切り替え自体はルートレイアウトの常駐tickが担当）
   useEffect(() => {
-    const id = setInterval(() => {
-      useTimer.getState().tick();
-      setPulse((p) => p + 1);
-    }, 500);
+    const id = setInterval(() => setPulse((p) => p + 1), 500);
     return () => clearInterval(id);
   }, []);
 

@@ -50,6 +50,14 @@
           "icon": "./assets/notification-icon.png",
           "color": "#a78bfa"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ]
   }

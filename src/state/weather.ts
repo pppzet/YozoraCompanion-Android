@@ -58,13 +58,20 @@ export const useWeather = create<WeatherState>()((set, get) => ({
       }
     }
     set({ status: "loading" });
+    // 取得中に別の場所へ切り替わっていたら、この応答は捨てる
+    const isStale = () => {
+      const current = get().location;
+      return !current || current.lat !== location.lat || current.lon !== location.lon;
+    };
     try {
       const data = await fetchForecast(location.lat, location.lon);
+      if (isStale()) return;
       const cache: WeatherCache = { lat: location.lat, lon: location.lon, data, fetchedAt: Date.now() };
       repo.metaSet("weatherCache", cache);
       set({ data, status: "ready", lastCode: data.current.weather_code });
       get().maybeSpeakDaily();
     } catch {
+      if (isStale()) return;
       set({ status: "error" });
     }
   },

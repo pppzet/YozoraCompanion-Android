@@ -37,11 +37,16 @@ function phaseDurationSec(settings: PomodoroSettings, phase: PomodoroPhase): num
   return (phase === "work" ? settings.work : settings.break) * 60;
 }
 
-/** フェーズ終了通知を予約する。予約完了時に停止済みなら即キャンセル。 */
+/**
+ * フェーズ終了通知を予約する。
+ * 予約が終わるまでの間に一時停止・リセット・再スタートで状況が変わっていたら、
+ * 古い予約を保存せずキャンセルする（新しい実行の通知IDを上書きしないため）。
+ */
 function armPhaseNotification(phase: PomodoroPhase, endAt: number): void {
   void (async () => {
     const id = await schedulePhaseEndNotification(phase, endAt);
-    if (useTimer.getState().running) {
+    const s = useTimer.getState();
+    if (s.running && s.endAt === endAt && s.phase === phase) {
       useTimer.setState({ notificationId: id });
     } else {
       await cancelScheduledNotification(id);

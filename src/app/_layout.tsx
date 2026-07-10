@@ -49,6 +49,12 @@ export default function RootLayout() {
     return () => clearTimeout(timeout);
   }, [ready]);
 
+  // タイマーはどのタブにいても進める（TimerCardが非表示でもフェーズ切り替え・チャイムが動く）
+  useEffect(() => {
+    const id = setInterval(() => useTimer.getState().tick(), 500);
+    return () => clearInterval(id);
+  }, []);
+
   // バックグラウンド復帰時：タイマーのフェーズを追い付かせ、天気キャッシュを見直す
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {

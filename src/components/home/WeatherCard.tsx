@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { weekdayOfDateKey } from "@/lib/format";
 import { weatherCodeInfo } from "@/lib/weather";
 import { colors } from "@/lib/theme";
 import { useUi } from "@/state/ui";
@@ -57,7 +58,7 @@ export function WeatherCard() {
             const [icon] = weatherCodeInfo(data.daily.weather_code[i] ?? -1);
             const max = Math.round(data.daily.temperature_2m_max[i] ?? 0);
             const min = Math.round(data.daily.temperature_2m_min[i] ?? 0);
-            const dow = WEEKDAYS[new Date(day).getDay()] ?? "";
+            const dow = WEEKDAYS[weekdayOfDateKey(day)] ?? "";
             return (
               <View key={day} style={styles.day}>
                 <Text style={styles.dayLabel}>{i === 0 ? "今日" : dow}</Text>

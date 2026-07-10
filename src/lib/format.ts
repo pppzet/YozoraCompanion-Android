@@ -23,6 +23,15 @@ export function clockText(date: Date): string {
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
 }
 
+/**
+ * YYYY-MM-DD を「ローカル日付」として曜日(0=日)を返す。
+ * new Date("YYYY-MM-DD") はUTC深夜と解釈され、UTCより西の端末で前日にずれるため使わない。
+ */
+export function weekdayOfDateKey(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getDay();
+}
+
 /** 配列からランダムに1つ選ぶ（空配列はundefined） */
 export function randomOf<T>(arr: readonly T[]): T | undefined {
   if (arr.length === 0) return undefined;
