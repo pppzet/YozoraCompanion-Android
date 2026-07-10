@@ -37,7 +37,8 @@ export const useWeather = create<WeatherState>()((set, get) => ({
 
   setLocation: (loc) => {
     repo.metaSet("weatherLocation", loc);
-    set({ location: loc });
+    // 新しい場所のラベルに前の場所の予報を組み合わせて見せない（しゃべる内容も同様）
+    set({ location: loc, data: null, lastCode: null, status: "loading" });
     void get().refresh(true);
   },
 

@@ -576,6 +576,8 @@ function BackupSection() {
             void (async () => {
               setBusy(true);
               try {
+                // 走行中のタイマーと通知予約を止めてから置き換える
+                useTimer.getState().stopForRestore();
                 await restoreBackup(picked.payload);
                 useCompanion.getState().initialize();
                 useUi.getState().initialize();

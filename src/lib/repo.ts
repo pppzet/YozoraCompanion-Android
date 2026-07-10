@@ -239,8 +239,8 @@ export function clearAllStores(): void {
 
 export const SAMPLE_CHARACTER_ID = "sample-luna";
 
-export function seedIfNeeded(): void {
-  if (metaGet<boolean>("seeded")) return;
+/** 初期キャラ「ルナ」とサンプルセリフを登録して使用中にする */
+export function seedSampleCharacter(): void {
   const db = getDb();
   db.withTransactionSync(() => {
     db.runSync(
@@ -259,6 +259,15 @@ export function seedIfNeeded(): void {
     }
   });
   metaSet("activeCharacterId", SAMPLE_CHARACTER_ID);
+}
+
+export function seedIfNeeded(): void {
+  if (metaGet<boolean>("seeded")) return;
+  seedSampleCharacter();
   metaSet("pomodoroSettings", DEFAULT_POMODORO);
   metaSet("seeded", true);
+}
+
+export function countCharacters(): number {
+  return getDb().getFirstSync<{ n: number }>("SELECT COUNT(*) AS n FROM characters")?.n ?? 0;
 }

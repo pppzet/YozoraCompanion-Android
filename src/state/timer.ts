@@ -31,10 +31,40 @@ interface TimerState {
   adjustSetting: (kind: keyof PomodoroSettings, delta: number) => void;
   /** 実行中に毎秒呼ばれ、フェーズ切り替えを処理する */
   tick: () => void;
+  /** バックアップ復元の直前に呼ぶ。走行中のタイマーと通知予約を確実に止める。 */
+  stopForRestore: () => void;
+}
+
+/** プロセス再起動をまたいで復元するための走行状態（metaに保存） */
+interface TimerRunState {
+  mode: TimerMode;
+  phase: PomodoroPhase;
+  running: boolean;
+  endAt: number | null;
+  remainingSec: number;
+  elapsedBase: number;
+  runningSince: number | null;
+  notificationId: string | null;
 }
 
 function phaseDurationSec(settings: PomodoroSettings, phase: PomodoroPhase): number {
   return (phase === "work" ? settings.work : settings.break) * 60;
+}
+
+/** 走行状態をmetaへ書き出す（Androidにプロセスを落とされても復元できるように） */
+function persistRunState(): void {
+  const s = useTimer.getState();
+  const runState: TimerRunState = {
+    mode: s.mode,
+    phase: s.phase,
+    running: s.running,
+    endAt: s.endAt,
+    remainingSec: s.remainingSec,
+    elapsedBase: s.elapsedBase,
+    runningSince: s.runningSince,
+    notificationId: s.notificationId,
+  };
+  repo.metaSet("timerRunState", runState);
 }
 
 /**
@@ -48,6 +78,7 @@ function armPhaseNotification(phase: PomodoroPhase, endAt: number): void {
     const s = useTimer.getState();
     if (s.running && s.endAt === endAt && s.phase === phase) {
       useTimer.setState({ notificationId: id });
+      persistRunState();
     } else {
       await cancelScheduledNotification(id);
     }
@@ -66,13 +97,47 @@ export const useTimer = create<TimerState>()((set, get) => ({
   notificationId: null,
 
   initialize: () => {
-    const stored = repo.metaGet<PomodoroSettings>("pomodoroSettings") ?? DEFAULT_POMODORO;
-    set({ settings: stored, remainingSec: stored.work * 60 });
+    const settings = repo.metaGet<PomodoroSettings>("pomodoroSettings") ?? DEFAULT_POMODORO;
+    const saved = repo.metaGet<TimerRunState>("timerRunState");
+    if (!saved || typeof saved !== "object") {
+      set({ settings, remainingSec: settings.work * 60 });
+      return;
+    }
+
+    // アプリ再起動後も走行中のタイマーを引き継ぐ（追い付きは常駐tickが行う）
+    const mode: TimerMode = saved.mode === "stopwatch" ? "stopwatch" : "pomodoro";
+    const phase: PomodoroPhase = saved.phase === "break" ? "break" : "work";
+    const endAt = typeof saved.endAt === "number" ? saved.endAt : null;
+    const runningSince = typeof saved.runningSince === "number" ? saved.runningSince : null;
+    const savedNotificationId = typeof saved.notificationId === "string" ? saved.notificationId : null;
+    const running =
+      saved.running === true &&
+      ((mode === "pomodoro" && endAt !== null) || (mode === "stopwatch" && runningSince !== null));
+
+    // 復元しない予約（停止中の残骸など）はOS側から消しておく
+    const keepNotification = running && mode === "pomodoro";
+    if (!keepNotification && savedNotificationId) {
+      void cancelScheduledNotification(savedNotificationId);
+    }
+
+    set({
+      settings,
+      mode,
+      phase,
+      running,
+      endAt: running && mode === "pomodoro" ? endAt : null,
+      remainingSec: typeof saved.remainingSec === "number" ? saved.remainingSec : settings[phase] * 60,
+      elapsedBase: typeof saved.elapsedBase === "number" ? saved.elapsedBase : 0,
+      runningSince: running && mode === "stopwatch" ? runningSince : null,
+      notificationId: keepNotification ? savedNotificationId : null,
+    });
+    persistRunState();
   },
 
   setMode: (mode) => {
     if (get().running) return;
     set({ mode });
+    persistRunState();
   },
 
   toggle: () => {
@@ -87,6 +152,7 @@ export const useTimer = create<TimerState>()((set, get) => ({
         const extra = s.runningSince ? (Date.now() - s.runningSince) / 1000 : 0;
         set({ running: false, runningSince: null, elapsedBase: s.elapsedBase + extra, notificationId: null });
       }
+      persistRunState();
       return;
     }
     // 開始・再開
@@ -97,6 +163,7 @@ export const useTimer = create<TimerState>()((set, get) => ({
     } else {
       set({ running: true, runningSince: Date.now() });
     }
+    persistRunState();
   },
 
   reset: () => {
@@ -113,6 +180,7 @@ export const useTimer = create<TimerState>()((set, get) => ({
     } else {
       set({ running: false, runningSince: null, elapsedBase: 0, notificationId: null });
     }
+    persistRunState();
   },
 
   adjustSetting: (kind, delta) => {
@@ -127,6 +195,7 @@ export const useTimer = create<TimerState>()((set, get) => ({
       patch.remainingSec = val * 60;
     }
     set(patch);
+    persistRunState();
   },
 
   tick: () => {
@@ -148,10 +217,25 @@ export const useTimer = create<TimerState>()((set, get) => ({
 
     void cancelScheduledNotification(s.notificationId);
     set({ phase, endAt, notificationId: null });
+    persistRunState();
     armPhaseNotification(phase, endAt);
 
     void playChime();
     useCompanion.getState().speak("pomodoro_done");
+  },
+
+  stopForRestore: () => {
+    const s = get();
+    void cancelScheduledNotification(s.notificationId);
+    set({
+      running: false,
+      phase: "work",
+      endAt: null,
+      remainingSec: s.settings.work * 60,
+      elapsedBase: 0,
+      runningSince: null,
+      notificationId: null,
+    });
   },
 }));
 

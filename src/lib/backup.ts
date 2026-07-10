@@ -78,7 +78,8 @@ export async function exportBackup(): Promise<void> {
     .map((m) => ({ id: m.id, characterId: m.characterId, role: m.role, text: m.text, timestamp: m.timestamp }));
 
   // メタはWeb版のキー名に合わせる（customBackgroundはdataURL化）
-  const EXCLUDED = new Set(["weatherCache", "customBackgroundUri", "notifPermissionAsked"]);
+  // timerRunState は端末ローカルな走行状態なのでバックアップに含めない
+  const EXCLUDED = new Set(["weatherCache", "customBackgroundUri", "notifPermissionAsked", "timerRunState"]);
   const meta: { key: string; value: unknown }[] = [];
   for (const entry of repo.metaAll()) {
     if (EXCLUDED.has(entry.key)) continue;
@@ -241,7 +242,7 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
   }
 
   for (const m of payload.meta ?? []) {
-    if (!m.key || m.key === "geminiApiKey" || m.key === "weatherCache") continue;
+    if (!m.key || m.key === "geminiApiKey" || m.key === "weatherCache" || m.key === "timerRunState") continue;
     if (m.key === "customBackground") {
       if (typeof m.value === "string" && m.value.startsWith("data:")) {
         const uri = await storeDataUrl(m.value, "background");
@@ -250,6 +251,12 @@ export async function restoreBackup(payload: BackupPayload): Promise<void> {
       continue;
     }
     repo.metaSet(m.key, m.value);
+  }
+
+  // キャラクターが1人も復元できなかった場合（カレンダーだけのバックアップ等）は
+  // 初期キャラ「ルナ」を用意して、アプリが使える状態を保つ
+  if (repo.countCharacters() === 0) {
+    repo.seedSampleCharacter();
   }
 
   // 復元後にサンプルデータを重ねて作らないようにする
