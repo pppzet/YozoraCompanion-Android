@@ -141,14 +141,14 @@ export function AmbientClock({ size }: AmbientClockProps) {
   const hourTransform = useDerivedValue(() => {
     const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
     const daySec = (local / 1000) % 86400;
-    const hours = (daySec / 3600) % 12;
-    return [{ rotate: hours * 30 * DEG }];
+    const hourOfDay = Math.floor(daySec / 3600) % 12;
+    return [{ rotate: hourOfDay * 30 * DEG }];
   });
   const minuteTransform = useDerivedValue(() => {
     const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
     const daySec = (local / 1000) % 86400;
-    const minutes = (daySec % 3600) / 60;
-    return [{ rotate: minutes * 6 * DEG }];
+    const minuteOfHour = Math.floor(daySec / 60) % 60;
+    return [{ rotate: minuteOfHour * 6 * DEG }];
   });
   const secondTransform = useDerivedValue(() => {
     const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
