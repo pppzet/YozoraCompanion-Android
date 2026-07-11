@@ -202,7 +202,6 @@ const styles = StyleSheet.create({
   emptyWrap: {
     flex: 1,
     justifyContent: "flex-end",
-    transform: [{ scaleY: -1 }],
   },
   emptyHint: {
     textAlign: "center",
