@@ -38,8 +38,13 @@ export async function resizeAndStore(picked: PickedImage, maxSize: number, name:
   if (width > maxSize || height > maxSize) {
     actions.push(width >= height ? { resize: { width: maxSize } } : { resize: { height: maxSize } });
   }
-  const manipulated = await manipulateAsync(picked.uri, actions, { compress: 0.85, format: SaveFormat.JPEG });
-  const dest = new File(dir, `${name}-${Date.now()}.jpg`);
+ const isPng = picked.uri.toLowerCase().endsWith(".png");
+ const format = isPng ? SaveFormat.PNG : SaveFormat.JPEG;
+ const manipulated = await manipulateAsync(picked.uri, actions, {
+  compress: isPng ? 1 : 0.85,
+  format,
+});
+const dest = new File(dir, `${name}-${Date.now()}.${isPng ? "png" : "jpg"}`);
   new File(manipulated.uri).move(dest);
   return dest.uri;
 }
