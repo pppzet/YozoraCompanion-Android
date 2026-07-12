@@ -93,7 +93,9 @@ export default function RootLayout() {
               <AmbientClock size={clockSize} />
             </Animated.View>
           ) : null}
-          <Slot />
+          <View style={styles.contentWrap}>
+                      <Slot />
+                                  </View>
           <Toast />
           <StatusBar style="light" />
         </View>
@@ -103,8 +105,14 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.nightDeep,
-  },
-});
+    root: {
+        flex: 1,
+            backgroundColor: colors.nightDeep,
+              },
+                contentWrap: {
+                    flex: 1,
+                        width: "100%",
+                            maxWidth: 480,
+                                alignSelf: "center",
+                                  },
+                                  });

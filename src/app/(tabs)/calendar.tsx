@@ -10,6 +10,7 @@ import { useCompanion } from "@/state/companion";
 import { toastError } from "@/state/ui";
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"] as const;
+type CalCell = { key: string; day: number | null };
 
 export default function CalendarScreen() {
   const now = new Date();
@@ -88,12 +89,40 @@ export default function CalendarScreen() {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = todayKey();
-  const cells: { key: string; day: number | null }[] = Array.from({ length: firstDay }, (_, i) => ({
+
+  const cells: CalCell[] = Array.from({ length: firstDay }, (_, i) => ({
     key: `blank-${i}`,
     day: null,
   }));
   for (let d = 1; d <= daysInMonth; d++) cells.push({ key: dateKey(year, month, d), day: d });
+  // 最終週も必ず7マス分埋める（崩れ防止）
+  while (cells.length % 7 !== 0) {
+    cells.push({ key: `blank-end-${cells.length}`, day: null });
+  }
+  // 7マスごとに「週の行」として分割する
+  const weeks: CalCell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
 
+  const renderCell = (cell: CalCell) => {
+    if (cell.day === null) return <View key={cell.key} style={styles.cell} />;
+    const isToday = cell.key === today;
+    const hasNote = Boolean(entries[cell.key]);
+    return (
+      <View key={cell.key} style={styles.cell}>
+        <Pressable
+          style={[styles.day, isToday && styles.dayToday, selected === cell.key && styles.daySelected]}
+          onPress={() => openEditor(cell.key)}
+          accessibilityRole="button"
+          accessibilityLabel={`${month + 1}月${cell.day}日`}
+        >
+          <Text style={styles.dayText}>{cell.day}</Text>
+          {hasNote ? <View style={styles.noteDot} /> : null}
+        </Pressable>
+      </View>
+    );
+  };
   return (
     <Screen>
       <Card>
@@ -108,29 +137,18 @@ export default function CalendarScreen() {
         </View>
 
         <View style={styles.grid}>
-          {WEEKDAYS.map((w) => (
-            <View key={w} style={styles.cell}>
-              <Text style={styles.weekday}>{w}</Text>
+          <View style={styles.weekRow}>
+            {WEEKDAYS.map((w) => (
+              <View key={w} style={styles.cell}>
+                <Text style={styles.weekday}>{w}</Text>
+              </View>
+            ))}
+          </View>
+          {weeks.map((week, wi) => (
+            <View key={`week-${wi}`} style={styles.weekRow}>
+              {week.map(renderCell)}
             </View>
           ))}
-          {cells.map((cell) => {
-            if (cell.day === null) return <View key={cell.key} style={styles.cell} />;
-            const isToday = cell.key === today;
-            const hasNote = Boolean(entries[cell.key]);
-            return (
-              <View key={cell.key} style={styles.cell}>
-                <Pressable
-                  style={[styles.day, isToday && styles.dayToday, selected === cell.key && styles.daySelected]}
-                  onPress={() => openEditor(cell.key)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${month + 1}月${cell.day}日`}
-                >
-                  <Text style={styles.dayText}>{cell.day}</Text>
-                  {hasNote ? <View style={styles.noteDot} /> : null}
-                </Pressable>
-              </View>
-            );
-          })}
         </View>
 
         {selected ? (
@@ -173,11 +191,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
   },
   grid: {
+    // 行(weekRow)ごとに描画するのでflexWrapは使わない
+  },
+  weekRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
   },
   cell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     padding: 3,
   },
   weekday: {
