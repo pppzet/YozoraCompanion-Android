@@ -57,6 +57,122 @@ export function buildSystemText(name: string, persona: string, personaHints: str
   return systemText;
 }
 
+/**
+ * GeminiのHTTPエラーを原因ごとに分類する。
+ *
+ * 注意: APIキー無効も、リクエスト内容の不正（モデル名ミスなど）も
+ * どちらもHTTP 400で返ってくるため、ステータスコードだけでは区別できない。
+ * レスポンス本文の message / status まで見て判定する。
+ * (参考: https://ai.google.dev/gemini-api/docs/troubleshooting)
+ */
+function classifyGeminiError(
+  status: number,
+  body: { error?: { status?: string; message?: string } } | null,
+): { userMessage: string; technicalDetail: string } {
+  const errStatus = body?.error?.status ?? "";
+  const errMessage = body?.error?.message ?? "";
+  const technicalDetail = `HTTP ${status} / ${errStatus}: ${errMessage}`;
+
+  switch (status) {
+    case 400:
+      if (/api key/i.test(errMessage)) {
+        return {
+          userMessage: "APIキーが正しくないみたいだよ。設定タブでキーを確認してみてね。",
+          technicalDetail,
+        };
+      }
+      if (errStatus === "FAILED_PRECONDITION") {
+        return {
+          userMessage: "この地域だと無料枠が使えないみたい。課金設定を確認してみてね。",
+          technicalDetail,
+        };
+      }
+      return {
+        userMessage: "リクエストの内容がおかしいみたい。モデル名などを確認してみてね。",
+        technicalDetail,
+      };
+    case 403:
+      return {
+        userMessage: "このAPIキーには権限がないみたいだよ。キーの設定を確認してみてね。",
+        technicalDetail,
+      };
+    case 404:
+      return {
+        userMessage: "指定したモデルが見つからないみたい。モデル名やバージョンを確認してみてね。",
+        technicalDetail,
+      };
+    case 429:
+      return {
+        userMessage: "アクセスが集中しているみたい。少し時間をおいてから試してみてね。",
+        technicalDetail,
+      };
+    case 500:
+    case 503:
+      return {
+        userMessage: "サーバー側が混み合っているみたい。少し時間をおいてから試してみてね。",
+        technicalDetail,
+      };
+    case 504:
+      return {
+        userMessage: "応答に時間がかかりすぎたみたい。メッセージを短くして試してみてね。",
+        technicalDetail,
+      };
+    default:
+      return {
+        userMessage: `エラーが起きたよ(コード${status})。キーや利用状況を確認してみてね。`,
+        technicalDetail,
+      };
+  }
+}
+
+/**
+ * OpenAI互換APIのHTTPエラーを原因ごとに分類する。
+ * (LM Studio / Ollama 等のローカルサーバーも含む)
+ */
+function classifyOpenAiError(
+  status: number,
+  body: { error?: { message?: string; code?: string | null; type?: string } } | null,
+): { userMessage: string; technicalDetail: string } {
+  const errMessage = body?.error?.message ?? "";
+  const errType = body?.error?.type ?? body?.error?.code ?? "";
+  const technicalDetail = `HTTP ${status} / ${errType}: ${errMessage}`;
+
+  switch (status) {
+    case 401:
+      return {
+        userMessage: "APIキーが正しくないみたいだよ。設定タブでキーを確認してみてね。",
+        technicalDetail,
+      };
+    case 403:
+      return {
+        userMessage: "このAPIキーには権限がないみたいだよ。キーの設定を確認してみてね。",
+        technicalDetail,
+      };
+    case 404:
+      return {
+        userMessage: "接続先URLかモデル名が正しくないみたい。設定を確認してみてね。",
+        technicalDetail,
+      };
+    case 429:
+      return {
+        userMessage: "アクセスが集中しているみたい。少し時間をおいてから試してみてね。",
+        technicalDetail,
+      };
+    case 500:
+    case 502:
+    case 503:
+      return {
+        userMessage: "接続先のサーバー側が混み合っているみたい。少し時間をおいてから試してみてね。",
+        technicalDetail,
+      };
+    default:
+      return {
+        userMessage: `エラーが起きたよ(コード${status})。接続先やキーを確認してみてね。`,
+        technicalDetail,
+      };
+  }
+}
+
 async function callGemini(apiKey: string, model: string, systemText: string, turns: AiChatTurn[]): Promise<AiResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const contents = turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] }));
@@ -67,7 +183,12 @@ async function callGemini(apiKey: string, model: string, systemText: string, tur
       body: JSON.stringify({ system_instruction: { parts: [{ text: systemText }] }, contents }),
     });
     if (!res.ok) {
-      return { ok: false, error: `エラーが起きたよ(コード${res.status})。キーや利用状況を確認してみてね。` };
+      const errBody = (await res.json().catch(() => null)) as {
+        error?: { status?: string; message?: string };
+      } | null;
+      const { userMessage, technicalDetail } = classifyGeminiError(res.status, errBody);
+      console.error(`[Gemini API Error] ${technicalDetail}`);
+      return { ok: false, error: userMessage };
     }
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -98,7 +219,12 @@ async function callOpenAiCompatible(
   try {
     const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ model, messages }) });
     if (!res.ok) {
-      return { ok: false, error: `エラーが起きたよ(コード${res.status})。接続先やキーを確認してみてね。` };
+      const errBody = (await res.json().catch(() => null)) as {
+        error?: { message?: string; code?: string | null; type?: string };
+      } | null;
+      const { userMessage, technicalDetail } = classifyOpenAiError(res.status, errBody);
+      console.error(`[OpenAI-compatible API Error] ${technicalDetail}`);
+      return { ok: false, error: userMessage };
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string | null } }[];
