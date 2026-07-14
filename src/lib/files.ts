@@ -16,6 +16,7 @@ export interface PickedImage {
   uri: string;
   width: number;
   height: number;
+  mimeType?: string;  // ← 追加
 }
 
 /** フォトライブラリから画像を1枚選ぶ（キャンセル時はnull） */
@@ -38,7 +39,9 @@ export async function resizeAndStore(picked: PickedImage, maxSize: number, name:
   if (width > maxSize || height > maxSize) {
     actions.push(width >= height ? { resize: { width: maxSize } } : { resize: { height: maxSize } });
   }
- const isPng = picked.uri.toLowerCase().endsWith(".png");
+ const isPng = picked.mimeType 
+  ? picked.mimeType === "image/png" 
+  : picked.uri.toLowerCase().endsWith(".png"); // mimeTypeが取れない時だけ拡張子に頼る
  const format = isPng ? SaveFormat.PNG : SaveFormat.JPEG;
  const manipulated = await manipulateAsync(picked.uri, actions, {
   compress: isPng ? 1 : 0.85,

@@ -13,7 +13,7 @@ import {
 import type { SkPath } from "@shopify/react-native-skia";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useDerivedValue } from "react-native-reanimated";
+import { useDerivedValue, useSharedValue, useAnimatedReaction, withTiming, Easing } from "react-native-reanimated";
 import { clockText } from "@/lib/format";
 import { colors } from "@/lib/theme";
 
@@ -138,23 +138,54 @@ export function AmbientClock({ size }: AmbientClockProps) {
 
   // useClock はマウントからの経過ms。実時刻へ換算して各針の角度を出す。
   const clockStart = useMemo(() => performance.now(), []);
-  const hourTransform = useDerivedValue(() => {
+
+// 時刻から「今の時/分」を出すだけの部分(角度計算はしない)
+const hourOfDayValue = useDerivedValue(() => {
+  const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
+  const daySec = (local / 1000) % 86400;
+  return Math.floor(daySec / 3600) % 12;
+});
+const minuteOfHourValue = useDerivedValue(() => {
+  const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
+  const daySec = (local / 1000) % 86400;
+  return Math.floor(daySec / 60) % 60;
+});
+
+// 実際に描画で使う「表示角度」(累積で増やす。巻き戻り無し)
+const hourTarget = useSharedValue(hourOfDayValue.value * 30);
+const minuteTarget = useSharedValue(minuteOfHourValue.value * 6);
+const hourDisplay = useSharedValue(hourTarget.value);
+const minuteDisplay = useSharedValue(minuteTarget.value);
+
+// 時が切り替わった瞬間だけ検知して、withTimingでふわっと寄せる
+useAnimatedReaction(
+  () => hourOfDayValue.value,
+  (current, previous) => {
+    if (previous !== null && current !== previous) {
+      hourTarget.value += 30;
+      hourDisplay.value = withTiming(hourTarget.value, { duration: 500, easing: Easing.out(Easing.cubic) });
+    }
+  },
+  []
+);
+useAnimatedReaction(
+  () => minuteOfHourValue.value,
+  (current, previous) => {
+    if (previous !== null && current !== previous) {
+      minuteTarget.value += 6;
+      minuteDisplay.value = withTiming(minuteTarget.value, { duration: 400, easing: Easing.out(Easing.cubic) });
+    }
+  },
+  []
+);
+
+const hourTransform = useDerivedValue(() => [{ rotate: hourDisplay.value * DEG }]);
+const minuteTransform = useDerivedValue(() => [{ rotate: minuteDisplay.value * DEG }]);
+const secondTransform = useDerivedValue(() => {
     const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
-    const daySec = (local / 1000) % 86400;
-    const hourOfDay = Math.floor(daySec / 3600) % 12;
-    return [{ rotate: hourOfDay * 30 * DEG }];
-  });
-  const minuteTransform = useDerivedValue(() => {
-    const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
-    const daySec = (local / 1000) % 86400;
-    const minuteOfHour = Math.floor(daySec / 60) % 60;
-    return [{ rotate: minuteOfHour * 6 * DEG }];
-  });
-  const secondTransform = useDerivedValue(() => {
-    const local = mountEpoch + clockStart + clock.value - tzOffsetMs;
-    const seconds = (local / 1000) % 60;
-    return [{ rotate: seconds * 6 * DEG }];
-  });
+      const seconds = (local / 1000) % 60;
+        return [{ rotate: seconds * 6 * DEG }];
+        });
 
   const [digital, setDigital] = useState(() => clockText(new Date()));
   useEffect(() => {
