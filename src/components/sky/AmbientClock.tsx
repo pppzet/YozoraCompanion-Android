@@ -151,11 +151,16 @@ const minuteOfHourValue = useDerivedValue(() => {
   return Math.floor(daySec / 60) % 60;
 });
 
-// 実際に描画で使う「表示角度」(累積で増やす。巻き戻り無し)
-const hourTarget = useSharedValue(hourOfDayValue.value * 30);
-const minuteTarget = useSharedValue(minuteOfHourValue.value * 6);
-const hourDisplay = useSharedValue(hourTarget.value);
-const minuteDisplay = useSharedValue(minuteTarget.value);
+// 🆕 初期値は「普通の数値計算」だけで出す(.valueを一切読まない)
+const initLocal = mountEpoch + clockStart - tzOffsetMs;
+const initDaySec = (initLocal / 1000) % 86400;
+const initHourOfDay = Math.floor(initDaySec / 3600) % 12;
+const initMinuteOfHour = Math.floor(initDaySec / 60) % 60;
+
+const hourTarget = useSharedValue(initHourOfDay * 30);
+const minuteTarget = useSharedValue(initMinuteOfHour * 6);
+const hourDisplay = useSharedValue(initHourOfDay * 30);
+const minuteDisplay = useSharedValue(initMinuteOfHour * 6);
 
 // 時が切り替わった瞬間だけ検知して、withTimingでふわっと寄せる
 useAnimatedReaction(
