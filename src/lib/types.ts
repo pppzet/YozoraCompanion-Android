@@ -88,9 +88,10 @@ export interface AiSettings {
   openaiModel: string;
 }
 
+// 変更後
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   provider: "gemini",
-  geminiModel: "gemini-2.5-flash",
+  geminiModel: "gemini-3.1-flash-lite",
   openaiBaseUrl: "https://api.openai.com/v1",
   openaiModel: "gpt-4o-mini",
 };

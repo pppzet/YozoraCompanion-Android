@@ -318,7 +318,7 @@ function AiSection() {
     try {
       const normalized = {
         ...settings,
-        geminiModel: settings.geminiModel.trim() || "gemini-2.5-flash",
+        geminiModel: settings.geminiModel.trim() || "gemini-3.1-flash-lite",
         openaiBaseUrl: settings.openaiBaseUrl.trim() || "https://api.openai.com/v1",
         openaiModel: settings.openaiModel.trim() || "gpt-4o-mini",
       };
@@ -375,7 +375,7 @@ function AiSection() {
             <AppTextInput
               value={settings.geminiModel}
               onChangeText={(geminiModel) => setSettings({ ...settings, geminiModel })}
-              placeholder="gemini-2.5-flash"
+              placeholder="gemini-3.1-flash-lite"
               autoCapitalize="none"
               autoCorrect={false}
             />
