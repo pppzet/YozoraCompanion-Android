@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyHint } from "@/components/ui/kit";
 import { AppTextInput } from "@/components/ui/kit";
 import { useTabBarClearance } from "@/components/ui/Screen";
-import { buildSystemText, callAi } from "@/lib/ai";
+import { buildSystemText, callAi, getUserProfile } from "@/lib/ai";
 import type { AiChatTurn } from "@/lib/ai";
 import * as repo from "@/lib/repo";
 import { colors, fonts, radii } from "@/lib/theme";
@@ -65,7 +65,10 @@ export default function ChatScreen() {
         const first = linesByCategory[category]?.[0];
         if (first) personaHints.push(first.text);
       }
-      const systemText = buildSystemText(character.name, character.persona, personaHints);
+
+      //　ユーザープロフィールも参照する
+      const systemText = buildSystemText(character.name, character.persona, personaHints, getUserProfile());
+
       const history = repo.getChatHistory(character.id).slice(-16);
       const turns: AiChatTurn[] = history.map((m) => ({ role: m.role, text: m.text }));
 

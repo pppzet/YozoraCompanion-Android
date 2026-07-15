@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { metaGet, metaSet } from "./repo";
-import { DEFAULT_AI_SETTINGS } from "./types";
-import type { AiProvider, AiSettings } from "./types";
+import { DEFAULT_AI_SETTINGS, DEFAULT_USER_PROFILE } from "./types";
+import type { AiProvider, AiSettings, UserProfile } from "./types";
 
 const SECURE_KEYS: Record<AiProvider, string> = {
   gemini: "ai_gemini_key",
@@ -16,6 +16,14 @@ export function getAiSettings(): AiSettings {
 export function saveAiSettings(settings: AiSettings): void {
   metaSet("aiSettings", settings);
 }
+export function getUserProfile(): UserProfile {
+    const stored = metaGet<Partial<UserProfile>>("userProfile");
+      return { ...DEFAULT_USER_PROFILE, ...stored };
+      }
+
+      export function saveUserProfile(profile: UserProfile): void {
+        metaSet("userProfile", profile);
+        }
 
 export async function getApiKey(provider: AiProvider): Promise<string> {
   try {
@@ -41,7 +49,12 @@ export interface AiChatTurn {
 export type AiResult = { ok: true; text: string } | { ok: false; error: string };
 
 /** キャラ設定を組み込んだシステムプロンプト（Web版と同じ構成） */
-export function buildSystemText(name: string, persona: string, personaHints: string[]): string {
+export function buildSystemText(
+  name: string,
+  persona: string,
+  personaHints: string[],
+  userProfile?: UserProfile,
+): string {
   let systemText = `あなたは「${name}」という名前のキャラクターです。`;
   if (persona.trim()) {
     systemText += `\n\n次の設定になりきって、ユーザーと会話してください。\n${persona.trim()}`;
@@ -52,6 +65,12 @@ export function buildSystemText(name: string, persona: string, personaHints: str
   }
   if (personaHints.length > 0) {
     systemText += `\n\n口調の参考例：${personaHints.join(" / ")}`;
+  }
+  if (userProfile?.callName.trim()) {
+    systemText += `\n\nユーザーのことは「${userProfile.callName.trim()}」と呼んでください。`;
+  }
+  if (userProfile?.personality.trim()) {
+    systemText += `\n\nユーザーについて:\n${userProfile.personality.trim()}`;
   }
   systemText += "\n\n返信は2〜3文程度の短さを目安にしてください。";
   return systemText;

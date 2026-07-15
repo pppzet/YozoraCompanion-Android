@@ -96,3 +96,12 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
 };
 
 export const DEFAULT_POMODORO: PomodoroSettings = { work: 25, break: 5 };
+export interface UserProfile {
+    callName: string; // 呼んでほしい名前
+      personality: string; // 性格・特性など自由記述
+      }
+
+      export const DEFAULT_USER_PROFILE: UserProfile = {
+        callName: "",
+          personality: "",
+}

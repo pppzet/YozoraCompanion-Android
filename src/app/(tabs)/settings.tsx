@@ -7,7 +7,7 @@ import { AppButton, AppTextInput, Card, EmptyHint, SectionTitle } from "@/compon
 import { Screen } from "@/components/ui/Screen";
 import { SelectField } from "@/components/ui/SelectModal";
 import type { SelectOption } from "@/components/ui/SelectModal";
-import { getAiSettings, getApiKey, saveAiSettings, setApiKey } from "@/lib/ai";
+import { getAiSettings, getApiKey, getUserProfile, saveAiSettings, saveUserProfile, setApiKey } from "@/lib/ai";
 import { exportBackup, pickBackupFile, restoreBackup } from "@/lib/backup";
 import { CATEGORY_LABELS, EXPRESSION_LABELS } from "@/lib/dialogue";
 import { deleteStoredImage, pickImage, resizeAndStore } from "@/lib/files";
@@ -190,7 +190,48 @@ function PersonaSection() {
     </>
   );
 }
+/* ---------------- ユーザープロフィール ---------------- */
 
+function UserProfileSection() {
+  const [profile, setProfile] = useState(getUserProfile);
+
+  return (
+    <>
+      <SectionTitle>ユーザープロフィール</SectionTitle>
+      <Card>
+        <Text style={styles.fieldLabel}>呼んでほしい名前</Text>
+        <AppTextInput
+          value={profile.callName}
+          onChangeText={(callName) => setProfile({ ...profile, callName })}
+          placeholder="〇〇さん、〇〇ちゃん など"
+        />
+        <Text style={styles.fieldLabel}>性格・特性など</Text>
+        <AppTextInput
+          multiline
+          value={profile.personality}
+          onChangeText={(personality) => setProfile({ ...profile, personality })}
+          style={styles.personaInput}
+          placeholder="自分の性格、特性、話してほしいこと・してほしくないことなど自由に書いてね。"
+        />
+        <AppButton
+          title="保存"
+          variant="primary"
+          onPress={() => {
+            try {
+              saveUserProfile(profile);
+              useUi.getState().showToast("保存したよ。");
+            } catch (err) {
+              toastError(err);
+            }
+          }}
+        />
+        <EmptyHint style={styles.mt8}>
+          ここに書いた内容がAIチャットに反映されて、あなたに合わせた話し方をしてくれるようになるよ。
+        </EmptyHint>
+      </Card>
+    </>
+  );
+}
 /* ---------------- セリフ ---------------- */
 
 const CATEGORY_OPTIONS: SelectOption<Category>[] = CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }));
@@ -621,6 +662,7 @@ export default function SettingsScreen() {
       <CharactersSection />
       <ExpressionsSection />
       <PersonaSection />
+      <UserProfileSection />  {/* ← この行を追加 */}
       <LinesSection />
       <AiSection />
       <WeatherSection />
