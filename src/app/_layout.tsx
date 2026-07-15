@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { AppState, StyleSheet, View, useWindowDimensions } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, withTiming, ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AmbientClock } from "@/components/sky/AmbientClock";
 import { NightSky } from "@/components/sky/NightSky";
@@ -85,6 +85,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
+     <ReducedMotionConfig mode={ReduceMotion.Never} />
       <SafeAreaProvider>
         <View style={styles.root}>
           <NightSky />
