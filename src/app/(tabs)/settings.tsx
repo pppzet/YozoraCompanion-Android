@@ -586,8 +586,9 @@ function PomodoroSection() {
 
 /* ---------------- バックアップ ---------------- */
 
-function BackupSection() {
-  const [busy, setBusy] = useState(false);
+function BackupSection({ onRestored }: { onRestored: () => void }) {
+
+ const [busy, setBusy] = useState(false);
 
   const doExport = async () => {
     setBusy(true);
@@ -624,6 +625,7 @@ function BackupSection() {
                 useUi.getState().initialize();
                 useTimer.getState().initialize();
                 useWeather.getState().initialize();
+                onRestored(); // ← この行を追加
                 useUi.getState().showToast("復元したよ。");
               } catch (err) {
                 toastError(err);
@@ -652,23 +654,26 @@ function BackupSection() {
       </Card>
     </>
   );
-}
+  }
+
 
 /* ---------------- 画面全体 ---------------- */
 
 export default function SettingsScreen() {
+  const [profileResetKey, setProfileResetKey] = useState(0); // ← 追加
+
   return (
     <Screen>
       <CharactersSection />
       <ExpressionsSection />
       <PersonaSection />
-      <UserProfileSection />  {/* ← この行を追加 */}
+      <UserProfileSection key={profileResetKey} /> {/* ← keyを追加 */}
       <LinesSection />
       <AiSection />
       <WeatherSection />
       <BackgroundSection />
       <PomodoroSection />
-      <BackupSection />
+      <BackupSection onRestored={() => setProfileResetKey((k) => k + 1)} /> {/* ← propを追加 */}
       <EmptyHint style={styles.footer}>
         夜空のコンパニオン v{Constants.expoConfig?.version ?? "?"}（pppzet/YozoraCompanion のAndroid移植版）
       </EmptyHint>
