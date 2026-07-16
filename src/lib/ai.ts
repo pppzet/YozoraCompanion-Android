@@ -1,7 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 import { metaGet, metaSet } from "./repo";
 import { DEFAULT_AI_SETTINGS, DEFAULT_USER_PROFILE } from "./types";
-import type { AiProvider, AiSettings, UserProfile } from "./types";
+import type { AiProvider, AiSettings, Category, Expression, UserProfile } from "./types";
+import { CATEGORY_LABELS, EXPRESSION_LABELS } from "./dialogue";
 
 const SECURE_KEYS: Record<AiProvider, string> = {
   gemini: "ai_gemini_key",
@@ -265,4 +266,123 @@ export async function callAi(systemText: string, turns: AiChatTurn[]): Promise<A
     return callGemini(apiKey, settings.geminiModel, systemText, turns);
   }
   return callOpenAiCompatible(apiKey, settings.openaiBaseUrl, settings.openaiModel, systemText, turns);
+}
+/* ---------------- セリフ自動生成 ---------------- */
+
+export interface GeneratedLine {
+  text: string;
+  /** 画像未登録の表情は含まれない。おまかせの場合はnull */
+  expression: Expression | null;
+}
+
+/** カテゴリごとに生成されたセリフ案（生成に失敗/対象外だったカテゴリはキー自体が存在しない） */
+export type GeneratedLines = Partial<Record<Category, GeneratedLine[]>>;
+
+/**
+ * セリフ自動生成用のシステムプロンプトを組み立てる。
+  * 表情は「画像が登録済みのものだけ」を選択肢として渡すことで、
+   * 表情画像が無いのに表情だけ指定されてしまう事故を防ぐ。
+    */
+export function buildAutoLineSystemText(
+  characterName: string,
+  persona: string,
+  userProfile: UserProfile,
+  categories: readonly Category[],
+  availableExpressions: readonly Expression[],
+): string {
+  const categoryList = categories.map((c) => `- ${c}: ${CATEGORY_LABELS[c]}`).join("\n");
+  const expressionNote =
+    availableExpressions.length > 0
+      ? `表情は次の一覧のキーからのみ選んでください（一覧に無いキーは絶対に使わないでください）:\n${availableExpressions
+        .map((e) => `- ${e}: ${EXPRESSION_LABELS[e]}`)
+        .join("\n")}\nしっくりくる表情が無いセリフは expression を null にしてください。`
+      : "このキャラクターにはまだ表情画像が登録されていません。expression は必ず null にしてください。";
+
+  return `あなたは「${characterName}」というキャラクターのセリフを考える台本作家です。
+                                                              次のキャラクター設定になりきって、指定されたカテゴリごとに短い一言セリフを3つずつ考えてください。
+
+                                                              【キャラクター設定】
+                                                              ${persona.trim() || "（特に設定なし。親しみやすく穏やかな口調で話してください）"}
+
+                                                              【ユーザーについて】
+                                                              呼び方: ${userProfile.callName.trim() || "（指定なし）"}
+                                                              性格・特性: ${userProfile.personality.trim() || "（指定なし）"}
+
+                                                              【生成してほしいカテゴリ】
+                                                              ${categoryList}
+
+                                                              【表情について】
+                                                              ${expressionNote}
+
+                                                              【出力形式】
+                                                              説明や前置き、コードブロック記号（\`\`\`）は一切不要です。以下のJSON形式のみを出力してください。
+                                                              {
+                                                                "カテゴリのキー": [
+                                                                    { "text": "セリフ", "expression": "表情キー または null" }
+                                                                      ]
+                                                                      }
+
+                                                                      各セリフは1〜2文程度の短さにし、キャラクターの口調・一人称を守り、同じカテゴリ内で内容が重複しないようにしてください。`;
+}
+
+/**
+ * AIの応答テキストからセリフ案を安全にパースする。
+  * 形式が壊れている・想定外のカテゴリ/表情キーが含まれる場合は無視して、
+   * 有効なものだけを残す。全滅した場合はnullを返す。
+    */
+export function parseGeneratedLines(
+  raw: string,
+  categories: readonly Category[],
+  availableExpressions: readonly Expression[],
+): GeneratedLines | null {
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const categorySet = new Set<string>(categories);
+  const expressionSet = new Set<string>(availableExpressions);
+  const result: GeneratedLines = {};
+
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!categorySet.has(key) || !Array.isArray(value)) continue;
+    const category = key as Category;
+    const lines: GeneratedLine[] = [];
+    for (const item of value) {
+      if (typeof item !== "object" || item === null) continue;
+      const text = (item as { text?: unknown }).text;
+      const expressionRaw = (item as { expression?: unknown }).expression;
+      if (typeof text !== "string" || !text.trim()) continue;
+      const expression =
+        typeof expressionRaw === "string" && expressionSet.has(expressionRaw) ? (expressionRaw as Expression) : null;
+      lines.push({ text: text.trim(), expression });
+    }
+    if (lines.length > 0) result[category] = lines;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/** セリフ自動生成をまとめて呼び出す */
+export async function generateAutoLines(
+  characterName: string,
+  persona: string,
+  categories: readonly Category[],
+  availableExpressions: readonly Expression[],
+): Promise<{ ok: true; lines: GeneratedLines } | { ok: false; error: string }> {
+  const userProfile = getUserProfile();
+  const systemText = buildAutoLineSystemText(characterName, persona, userProfile, categories, availableExpressions);
+  const result = await callAi(systemText, [{ role: "user", text: "指示に従ってJSON形式で出力してください。" }]);
+  if (!result.ok) return result;
+  const parsed = parseGeneratedLines(result.text, categories, availableExpressions);
+  if (!parsed) return { ok: false, error: "生成結果をうまく読み取れなかったよ。もう一度試してみてね。" };
+  return { ok: true, lines: parsed };
 }

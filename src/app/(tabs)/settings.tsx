@@ -7,7 +7,16 @@ import { AppButton, AppTextInput, Card, EmptyHint, SectionTitle } from "@/compon
 import { Screen } from "@/components/ui/Screen";
 import { SelectField } from "@/components/ui/SelectModal";
 import type { SelectOption } from "@/components/ui/SelectModal";
-import { getAiSettings, getApiKey, getUserProfile, saveAiSettings, saveUserProfile, setApiKey } from "@/lib/ai";
+import {
+  generateAutoLines,
+  getAiSettings,
+  getApiKey,
+  getUserProfile,
+  saveAiSettings,
+  saveUserProfile,
+  setApiKey,
+} from "@/lib/ai";
+import type { GeneratedLine, GeneratedLines } from "@/lib/ai";
 import { exportBackup, pickBackupFile, restoreBackup } from "@/lib/backup";
 import { CATEGORY_LABELS, EXPRESSION_LABELS } from "@/lib/dialogue";
 import { deleteStoredImage, pickImage, resizeAndStore } from "@/lib/files";
@@ -296,6 +305,137 @@ function LinesSection() {
   );
 }
 
+/* ---------------- セリフをAIで自動生成 ---------------- */
+
+function AutoGenerateLinesSection() {
+  const character = useCompanion(selectActiveCharacter);
+  const addLine = useCompanion((s) => s.addLine);
+  const [busy, setBusy] = useState(false);
+  const [drafts, setDrafts] = useState<GeneratedLines | null>(null);
+
+  if (!character) return null;
+
+  // 画像が登録済みの表情だけをAIの選択肢として渡す（未登録の表情を提案されても連動できないため）
+  const availableExpressions = EXPRESSIONS.filter((e) => character.images[e]);
+
+  const generate = async () => {
+    setBusy(true);
+    try {
+      const result = await generateAutoLines(character.name, character.persona, CATEGORIES, availableExpressions);
+      if (!result.ok) {
+        useUi.getState().showToast(result.error);
+        return;
+      }
+      setDrafts(result.lines);
+    } catch (err) {
+      toastError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const updateDraft = (category: Category, index: number, patch: Partial<GeneratedLine>) => {
+    setDrafts((prev) => {
+      if (!prev) return prev;
+      const list = [...(prev[category] ?? [])];
+      const current = list[index];
+      if (!current) return prev;
+      list[index] = {
+        text: patch.text !== undefined ? patch.text : current.text,
+        expression: patch.expression !== undefined ? patch.expression : current.expression,
+      };
+      return { ...prev, [category]: list };
+    });
+  };
+
+  const removeDraft = (category: Category, index: number) => {
+    setDrafts((prev) => {
+      if (!prev) return prev;
+      const list = (prev[category] ?? []).filter((_, i) => i !== index);
+      return { ...prev, [category]: list };
+    });
+  };
+
+  const commit = () => {
+    if (!drafts) return;
+    try {
+      let count = 0;
+      for (const category of CATEGORIES) {
+        for (const draft of drafts[category] ?? []) {
+          const trimmed = draft.text.trim();
+          if (!trimmed) continue;
+          addLine(category, trimmed, draft.expression);
+          count += 1;
+        }
+      }
+      setDrafts(null);
+      useUi.getState().showToast(count > 0 ? `${count}件のセリフを登録したよ。` : "登録できるセリフがなかったよ。");
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
+
+  return (
+    <>
+      <SectionTitle>セリフをAIで自動生成 🪄</SectionTitle>
+      <Card>
+        {!drafts ? (
+          <>
+            <EmptyHint style={styles.mb10}>
+              使用中のキャラの性格設定とユーザープロフィールをもとに、各項目の一言セリフを自動で考えるよ。生成後に内容を確認・編集してから登録するから、そのまま反映される心配はないよ。
+            </EmptyHint>
+            <AppButton
+              title={busy ? "生成中…" : "🪄 セリフを生成する"}
+              variant="primary"
+              disabled={busy}
+              onPress={() => void generate()}
+            />
+          </>
+        ) : (
+          <>
+            {CATEGORIES.map((category) => {
+              const list = drafts[category] ?? [];
+              if (list.length === 0) return null;
+              return (
+                <View key={category} style={styles.mt10}>
+                  <Text style={styles.fieldLabel}>{CATEGORY_LABELS[category]}</Text>
+                  {list.map((draft, i) => (
+                    <View key={i} style={styles.draftRow}>
+                      <View style={styles.draftMain}>
+                        <AppTextInput
+                          multiline
+                          value={draft.text}
+                          onChangeText={(text) => updateDraft(category, i, { text })}
+                          style={styles.draftInput}
+                        />
+                        <SelectField
+                          options={EXPRESSION_OPTIONS}
+                          value={draft.expression ?? "auto"}
+                          onChange={(v) => updateDraft(category, i, { expression: v === "auto" ? null : v })}
+                        />
+                      </View>
+                      <AppButton title="✕" variant="dangerTiny" onPress={() => removeDraft(category, i)} />
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+            <View style={styles.rowButtons}>
+              <AppButton title="この内容で登録する" variant="primary" onPress={commit} style={styles.mt10} />
+              <AppButton title="作り直す" disabled={busy} onPress={() => void generate()} style={styles.mt10} />
+            </View>
+            <AppButton title="やめる" variant="danger" onPress={() => setDrafts(null)} style={styles.mt8} />
+          </>
+        )}
+        {availableExpressions.length === 0 ? (
+          <EmptyHint style={styles.mt8}>
+            まだ表情画像が登録されていないから、生成されるセリフの表情は全部「おまかせ」になるよ。表情画像を登録すると、AIがその中から選んでくれるようになるよ。
+          </EmptyHint>
+        ) : null}
+      </Card>
+    </>
+  );                                                                                                        
+}
 /* ---------------- AIチャット ---------------- */
 
 const PROVIDER_OPTIONS: SelectOption<AiProvider>[] = [
@@ -588,7 +728,7 @@ function PomodoroSection() {
 
 function BackupSection({ onRestored }: { onRestored: () => void }) {
 
- const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const doExport = async () => {
     setBusy(true);
@@ -654,7 +794,7 @@ function BackupSection({ onRestored }: { onRestored: () => void }) {
       </Card>
     </>
   );
-  }
+}
 
 
 /* ---------------- 画面全体 ---------------- */
@@ -669,6 +809,7 @@ export default function SettingsScreen() {
       <PersonaSection />
       <UserProfileSection key={profileResetKey} /> {/* ← keyを追加 */}
       <LinesSection />
+      <AutoGenerateLinesSection />
       <AiSection />
       <WeatherSection />
       <BackgroundSection />
@@ -772,6 +913,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  draftRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  draftMain: {
+    flex: 1,
+    gap: 6,
+  },
+  draftInput: {
+    minHeight: 44,
+    marginBottom: 0,
+  },
+
   searchRow: {
     flexDirection: "row",
     alignItems: "flex-start",
